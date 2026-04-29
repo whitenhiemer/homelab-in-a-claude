@@ -1,29 +1,24 @@
 baseURL = "https://homelab.woodhead.tech/"
-languageCode = "en-us"
+locale = "en-us"
 title = "Homelab in a Claude"
+theme = "hugo-geekdoc"
+
+enableRobotsTXT = true
+pygmentsUseClasses = true
+pygmentsCodeFences = true
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = true
+  [markup.tableOfContents]
+    startLevel = 1
+    endLevel = 9
 
 [params]
+  geekdocRepo = "https://github.com/whitenhiemer/homelab-in-a-claude"
+  geekdocEditPath = "edit/master/website/content"
+  geekdocSearch = true
+  geekdocSearchShowParent = true
+  geekdocDarkModeToggle = true
+  geekdocCollapseSection = true
   description = "An AI-guided homelab builder powered by Claude"
-  github = "https://github.com/whitenhiemer/homelab-in-a-claude"
-
-[menu]
-  [[menu.main]]
-    name = "Getting Started"
-    url = "/docs/getting-started/"
-    weight = 1
-  [[menu.main]]
-    name = "Architecture"
-    url = "/docs/architecture/"
-    weight = 2
-  [[menu.main]]
-    name = "Recipes"
-    url = "/recipes/"
-    weight = 3
-  [[menu.main]]
-    name = "Contributing"
-    url = "/docs/contributing/"
-    weight = 4
-  [[menu.main]]
-    name = "GitHub"
-    url = "https://github.com/whitenhiemer/homelab-in-a-claude"
-    weight = 5

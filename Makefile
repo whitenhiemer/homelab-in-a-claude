@@ -30,8 +30,10 @@ mcp-clean:
 		rm -f mcp/$$srv/bin/$$srv; \
 	done
 
+HUGO := $(shell command -v hugo 2>/dev/null || echo /tmp/hugo)
+
 website-build:
-	cd website && hugo --minify
+	cd website && $(HUGO) --minify
 
 website-dev:
-	cd website && hugo server --buildDrafts
+	cd website && $(HUGO) server --buildDrafts
