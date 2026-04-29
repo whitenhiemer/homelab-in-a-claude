@@ -1,0 +1,73 @@
+services:
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    user: "{{ mon_uid }}:{{ mon_gid }}"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - {{ mon_base_dir }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - {{ mon_base_dir }}/prometheus/data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    user: "{{ mon_uid }}:{{ mon_gid }}"
+    volumes:
+      - {{ mon_base_dir }}/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    user: "{{ mon_uid }}:{{ mon_gid }}"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_password }}
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - {{ mon_base_dir }}/grafana/data:/var/lib/grafana
+      - {{ mon_base_dir }}/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    pid: host
+    network_mode: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)
+    restart: unless-stopped
+
+{% if pve_host != "" %}
+  pve-exporter:
+    image: prompve/prometheus-pve-exporter:latest
+    container_name: pve-exporter
+    environment:
+      - PVE_USER={{ pve_user }}
+      - PVE_TOKEN_NAME={{ pve_token_name }}
+      - PVE_TOKEN_VALUE={{ pve_token_value }}
+      - PVE_VERIFY_SSL=false
+    ports:
+      - "9221:9221"
+    restart: unless-stopped
+{% endif %}

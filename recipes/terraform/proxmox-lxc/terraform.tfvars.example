@@ -1,0 +1,23 @@
+proxmox_endpoint  = "https://192.168.86.29:8006"
+proxmox_api_token = "terraform@pve!homelab=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_insecure  = true
+proxmox_node      = "thinkcentre1"
+
+vm_id       = 200
+hostname    = "myservice"
+description = "My service LXC"
+tags        = ["homelab"]
+
+cpu_cores    = 1
+memory_mb    = 512
+disk_size_gb = 8
+storage      = "local-lvm"
+
+network_bridge = "vmbr0"
+ip_address     = "192.168.86.50"
+subnet_prefix  = 24
+gateway        = "192.168.86.1"
+nameservers    = ["8.8.8.8", "8.8.4.4"]
+
+ssh_public_keys = ["ssh-ed25519 AAAA... you@host"]
+enable_nesting  = false

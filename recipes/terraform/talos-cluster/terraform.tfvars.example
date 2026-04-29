@@ -1,0 +1,30 @@
+proxmox_endpoint  = "https://192.168.86.29:8006"
+proxmox_api_token = "terraform@pve!homelab=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_insecure  = true
+proxmox_node      = "thinkcentre1"
+
+cluster_name = "talos"
+talos_iso    = "local:iso/talos-amd64.iso"
+storage      = "local-lvm"
+
+cluster_vip = "192.168.86.100"
+
+# Single control plane
+controlplane_count        = 1
+controlplane_vmid_start   = 400
+controlplane_ips          = ["192.168.86.101"]
+controlplane_nodes        = ["tower1"]
+controlplane_cores        = 2
+controlplane_memory       = 4096
+controlplane_balloon      = 2048
+controlplane_disk_size_gb = 50
+
+# Two workers
+worker_count        = 2
+worker_vmid_start   = 410
+worker_ips          = ["192.168.86.111", "192.168.86.112"]
+worker_nodes        = ["thinkcentre2", "thinkcentre3"]
+worker_cores        = 4
+worker_memory       = 8192
+worker_balloon      = 4096
+worker_disk_size_gb = 100

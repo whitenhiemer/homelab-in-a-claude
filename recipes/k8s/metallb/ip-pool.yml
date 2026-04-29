@@ -1,0 +1,23 @@
+---
+# MetalLB IP address pool for LoadBalancer services.
+# Adjust the address range to match your network (must be in the same /24 as nodes,
+# and must NOT overlap with your DHCP range).
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 192.168.86.150-192.168.86.199
+---
+# L2 advertisement — MetalLB responds to ARP requests for assigned IPs.
+# Works on any flat network without requiring BGP.
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - default-pool

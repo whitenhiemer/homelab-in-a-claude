@@ -1,0 +1,18 @@
+proxmox_endpoint  = "https://192.168.86.29:8006"
+proxmox_api_token = "terraform@pve!homelab=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_insecure  = true
+proxmox_node      = "thinkcentre1"
+
+vm_id       = 300
+name        = "myvm"
+description = "My VM"
+tags        = ["homelab"]
+
+iso = "local:iso/debian-12.9.0-amd64-netinst.iso"
+
+cpu_cores         = 2
+memory_mb         = 2048
+memory_balloon_mb = 0
+disk_size_gb      = 32
+storage           = "local-lvm"
+network_bridge    = "vmbr0"

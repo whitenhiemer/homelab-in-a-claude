@@ -1,0 +1,163 @@
+---
+# Deploy Prometheus + Grafana + Alertmanager monitoring stack via Docker Compose.
+#
+# Variables (pass via --extra-vars):
+#   grafana_password      Grafana admin password (default: changeme)
+#   discord_webhook       Discord webhook URL for alerts (optional)
+#   pve_host              Proxmox host IP for PVE exporter (optional)
+#   pve_user              Proxmox API user for PVE exporter (optional)
+#   pve_token_name        Proxmox API token name (optional)
+#   pve_token_value       Proxmox API token value (optional)
+
+- name: Deploy monitoring stack
+  hosts: monitoring
+  vars:
+    mon_user: monitoring
+    mon_uid: 1000
+    mon_gid: 1000
+    mon_base_dir: /opt/monitoring
+    grafana_password: "changeme"
+    discord_webhook: ""
+    pve_host: ""
+    pve_user: ""
+    pve_token_name: ""
+    pve_token_value: ""
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install Docker prerequisites
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg]
+        state: present
+
+    - name: Create Docker keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker GPG key
+      ansible.builtin.shell:
+        cmd: curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Set Docker GPG key permissions
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        mode: "0644"
+
+    - name: Add Docker repository
+      ansible.builtin.copy:
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable
+        dest: /etc/apt/sources.list.d/docker.list
+        mode: "0644"
+
+    - name: Install Docker CE
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Create monitoring system user
+      ansible.builtin.user:
+        name: "{{ mon_user }}"
+        uid: "{{ mon_uid }}"
+        system: true
+        groups: docker
+        append: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create directory structure
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ mon_uid }}"
+        group: "{{ mon_gid }}"
+        mode: "0755"
+      loop:
+        - "{{ mon_base_dir }}"
+        - "{{ mon_base_dir }}/prometheus"
+        - "{{ mon_base_dir }}/prometheus/data"
+        - "{{ mon_base_dir }}/alertmanager"
+        - "{{ mon_base_dir }}/grafana/data"
+        - "{{ mon_base_dir }}/grafana/provisioning/datasources"
+        - "{{ mon_base_dir }}/grafana/provisioning/dashboards"
+        - "{{ mon_base_dir }}/pve-exporter"
+
+    - name: Deploy docker-compose.yml
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ mon_base_dir }}/docker-compose.yml"
+        owner: "{{ mon_uid }}"
+        group: "{{ mon_gid }}"
+        mode: "0644"
+      notify: Restart monitoring stack
+
+    - name: Deploy Prometheus config
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: "{{ mon_base_dir }}/prometheus/prometheus.yml"
+        owner: "{{ mon_uid }}"
+        group: "{{ mon_gid }}"
+        mode: "0644"
+      notify: Restart monitoring stack
+
+    - name: Deploy Alertmanager config
+      ansible.builtin.template:
+        src: alertmanager.yml.j2
+        dest: "{{ mon_base_dir }}/alertmanager/alertmanager.yml"
+        owner: "{{ mon_uid }}"
+        group: "{{ mon_gid }}"
+        mode: "0644"
+      notify: Restart monitoring stack
+
+    - name: Deploy Grafana datasource provisioning
+      ansible.builtin.copy:
+        content: |
+          apiVersion: 1
+          datasources:
+            - name: Prometheus
+              type: prometheus
+              url: http://prometheus:9090
+              isDefault: true
+              access: proxy
+        dest: "{{ mon_base_dir }}/grafana/provisioning/datasources/prometheus.yml"
+        owner: "{{ mon_uid }}"
+        group: "{{ mon_gid }}"
+        mode: "0644"
+
+    - name: Deploy PVE exporter credentials
+      ansible.builtin.copy:
+        content: |
+          [pve.yml]
+          user={{ pve_user }}
+          token_name={{ pve_token_name }}
+          token_value={{ pve_token_value }}
+        dest: "{{ mon_base_dir }}/pve-exporter/pve.env"
+        owner: "{{ mon_uid }}"
+        group: "{{ mon_gid }}"
+        mode: "0600"
+      when: pve_user != ""
+
+    - name: Start monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ mon_base_dir }}"
+        state: present
+      become: true
+
+  handlers:
+    - name: Restart monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ mon_base_dir }}"
+        state: present
+        recreate: always
+      become: true
