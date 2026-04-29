@@ -13,6 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 func args(req mcp.CallToolRequest) map[string]any {
@@ -49,26 +50,44 @@ func handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 	if timeoutSec == 0 {
 		timeoutSec = 30
 	}
-	if keyPath == "" {
-		keyPath = filepath.Join(os.Getenv("HOME"), ".ssh", "id_ed25519")
-		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
-			keyPath = filepath.Join(os.Getenv("HOME"), ".ssh", "id_rsa")
+	var authMethods []ssh.AuthMethod
+
+	// Prefer SSH agent when available
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		if conn, err := net.Dial("unix", sock); err == nil {
+			authMethods = append(authMethods, ssh.PublicKeysCallback(agent.NewClient(conn).Signers))
 		}
 	}
 
-	keyBytes, err := os.ReadFile(keyPath)
-	if err != nil {
-		return errResult(fmt.Errorf("read private key %s: %w", keyPath, err))
+	// Fall back to key file
+	if keyPath == "" {
+		for _, candidate := range []string{"id_ed25519", "id_ansible", "id_rsa"} {
+			p := filepath.Join(os.Getenv("HOME"), ".ssh", candidate)
+			if _, err := os.Stat(p); err == nil {
+				keyPath = p
+				break
+			}
+		}
+	}
+	if keyPath != "" {
+		keyBytes, err := os.ReadFile(keyPath)
+		if err != nil {
+			return errResult(fmt.Errorf("read private key %s: %w", keyPath, err))
+		}
+		signer, err := ssh.ParsePrivateKey(keyBytes)
+		if err != nil {
+			return errResult(fmt.Errorf("parse private key: %w", err))
+		}
+		authMethods = append(authMethods, ssh.PublicKeys(signer))
 	}
 
-	signer, err := ssh.ParsePrivateKey(keyBytes)
-	if err != nil {
-		return errResult(fmt.Errorf("parse private key: %w", err))
+	if len(authMethods) == 0 {
+		return errResult(fmt.Errorf("no SSH auth available: set SSH_AUTH_SOCK or provide private_key_path"))
 	}
 
 	cfg := &ssh.ClientConfig{
 		User: user,
-		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		Auth: authMethods,
 		// Self-signed host keys are the norm in homelabs; skip verification.
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec
 		Timeout:         time.Duration(timeoutSec) * time.Second,
@@ -110,7 +129,7 @@ func handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 }
 
 func errResult(err error) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultText("error: " + err.Error()), nil
+	return mcp.NewToolResultError(err.Error()), nil
 }
 
 func main() {

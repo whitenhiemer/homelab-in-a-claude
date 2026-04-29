@@ -17,7 +17,7 @@ func resultJSON(v any) (*mcp.CallToolResult, error) {
 }
 
 func resultError(err error) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultText(fmt.Sprintf("error: %s", err.Error())), nil
+	return mcp.NewToolResultError(err.Error()), nil
 }
 
 func args(req mcp.CallToolRequest) map[string]any {

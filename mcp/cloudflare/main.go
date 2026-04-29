@@ -29,6 +29,9 @@ func newCFClient(token string) *cfClient {
 }
 
 func (c *cfClient) do(method, path string, body string) (json.RawMessage, error) {
+	if c.token == "" {
+		return nil, fmt.Errorf("CF_API_TOKEN env var must be set")
+	}
 	var bodyReader io.Reader
 	if body != "" {
 		bodyReader = strings.NewReader(body)
@@ -119,7 +122,7 @@ func resultJSON(v any) (*mcp.CallToolResult, error) {
 }
 
 func errResult(err error) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultText("error: " + err.Error()), nil
+	return mcp.NewToolResultError(err.Error()), nil
 }
 
 // ---- tool handlers ----
@@ -222,13 +225,7 @@ func (s *srv) handleDeleteRecord(ctx context.Context, req mcp.CallToolRequest) (
 }
 
 func main() {
-	token := os.Getenv("CF_API_TOKEN")
-	if token == "" {
-		fmt.Fprintln(os.Stderr, "CF_API_TOKEN must be set")
-		os.Exit(1)
-	}
-
-	s := &srv{cf: newCFClient(token)}
+	s := &srv{cf: newCFClient(os.Getenv("CF_API_TOKEN"))}
 	mcpServer := server.NewMCPServer("cloudflare-mcp", "0.1.0",
 		server.WithToolCapabilities(true),
 	)

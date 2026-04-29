@@ -25,7 +25,7 @@ func strArg(req mcp.CallToolRequest, key string) string {
 }
 
 func errResult(err error) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultText("error: " + err.Error()), nil
+	return mcp.NewToolResultError(err.Error()), nil
 }
 
 func runCmd(name string, cmdArgs []string, dir string) (string, error) {

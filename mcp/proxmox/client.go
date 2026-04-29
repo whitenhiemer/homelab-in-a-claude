@@ -31,7 +31,17 @@ type apiResponse struct {
 	Data json.RawMessage `json:"data"`
 }
 
+func (c *client) checkCreds() error {
+	if c.apiToken == "" || c.baseURL == "https://:8006/api2/json" {
+		return fmt.Errorf("PROXMOX_HOST and PROXMOX_API_TOKEN env vars must be set")
+	}
+	return nil
+}
+
 func (c *client) get(path string) (json.RawMessage, error) {
+	if err := c.checkCreds(); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequest("GET", c.baseURL+path, nil)
 	if err != nil {
 		return nil, err
@@ -60,6 +70,9 @@ func (c *client) get(path string) (json.RawMessage, error) {
 }
 
 func (c *client) post(path string, params map[string]string) (json.RawMessage, error) {
+	if err := c.checkCreds(); err != nil {
+		return nil, err
+	}
 	form := url.Values{}
 	for k, v := range params {
 		form.Set(k, v)
@@ -94,6 +107,9 @@ func (c *client) post(path string, params map[string]string) (json.RawMessage, e
 }
 
 func (c *client) delete(path string) error {
+	if err := c.checkCreds(); err != nil {
+		return err
+	}
 	req, err := http.NewRequest("DELETE", c.baseURL+path, nil)
 	if err != nil {
 		return err

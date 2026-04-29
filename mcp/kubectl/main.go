@@ -23,7 +23,7 @@ func strArg(req mcp.CallToolRequest, key string) string {
 }
 
 func errResult(err error) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultText("error: " + err.Error()), nil
+	return mcp.NewToolResultError(err.Error()), nil
 }
 
 func runBin(bin string, binArgs []string, kubeconfig string) (string, error) {

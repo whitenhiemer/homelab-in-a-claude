@@ -13,16 +13,11 @@ type srv struct {
 }
 
 func main() {
-	host := os.Getenv("PROXMOX_HOST")
-	token := os.Getenv("PROXMOX_API_TOKEN")
-	skipTLS := os.Getenv("PROXMOX_INSECURE") == "true"
-
-	if host == "" || token == "" {
-		fmt.Fprintln(os.Stderr, "PROXMOX_HOST and PROXMOX_API_TOKEN must be set")
-		os.Exit(1)
-	}
-
-	s := &srv{pve: newClient(host, token, skipTLS)}
+	s := &srv{pve: newClient(
+		os.Getenv("PROXMOX_HOST"),
+		os.Getenv("PROXMOX_API_TOKEN"),
+		os.Getenv("PROXMOX_INSECURE") == "true",
+	)}
 
 	mcpServer := server.NewMCPServer("proxmox-mcp", "0.1.0",
 		server.WithToolCapabilities(true),
