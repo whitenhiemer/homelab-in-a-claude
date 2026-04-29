@@ -1,0 +1,39 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+ansible/vault_password
+
+# Secrets and local config
+.env
+*.env
+secrets/
+*_secrets.yaml
+*_secrets.yml
+
+# Generated configs
+*/_out/
+talosconfig
+kubeconfig
+
+# Go binaries
+mcp/*/bin/
+*.exe
+
+# Hugo build output
+website/public/
+website/resources/_gen/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp

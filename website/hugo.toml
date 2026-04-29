@@ -1,0 +1,29 @@
+baseURL = "https://homelab.woodhead.tech/"
+languageCode = "en-us"
+title = "Homelab in a Claude"
+
+[params]
+  description = "An AI-guided homelab builder powered by Claude"
+  github = "https://github.com/whitenhiemer/homelab-in-a-claude"
+
+[menu]
+  [[menu.main]]
+    name = "Getting Started"
+    url = "/docs/getting-started/"
+    weight = 1
+  [[menu.main]]
+    name = "Architecture"
+    url = "/docs/architecture/"
+    weight = 2
+  [[menu.main]]
+    name = "Recipes"
+    url = "/recipes/"
+    weight = 3
+  [[menu.main]]
+    name = "Contributing"
+    url = "/docs/contributing/"
+    weight = 4
+  [[menu.main]]
+    name = "GitHub"
+    url = "https://github.com/whitenhiemer/homelab-in-a-claude"
+    weight = 5
