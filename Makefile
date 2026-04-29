@@ -1,13 +1,15 @@
 .PHONY: mcp-build mcp-install mcp-clean website-build website-dev help
 
 MCP_SERVERS := proxmox terraform ansible kubectl cloudflare ssh
-CLAUDE_MCP_CONFIG := $(HOME)/.claude/mcp.json
+
+# Use GOROOT from environment if set, otherwise rely on PATH
+GO := $(if $(shell command -v go 2>/dev/null),go,$(error "go not found in PATH"))
 
 help:
 	@echo "homelab-in-a-claude"
 	@echo ""
 	@echo "  mcp-build     Build all MCP server binaries"
-	@echo "  mcp-install   Register MCP servers with Claude Code"
+	@echo "  mcp-install   Build and register MCP servers with Claude Code"
 	@echo "  mcp-clean     Remove built binaries"
 	@echo "  website-build Build the Hugo website"
 	@echo "  website-dev   Run Hugo dev server"
@@ -15,12 +17,13 @@ help:
 mcp-build:
 	@for srv in $(MCP_SERVERS); do \
 		echo "Building mcp/$$srv..."; \
-		cd mcp/$$srv && go build -o bin/$$srv . && cd ../..; \
+		mkdir -p mcp/$$srv/bin; \
+		(cd mcp/$$srv && $(GO) build -o bin/$$srv .) || exit 1; \
 	done
 
 mcp-install: mcp-build
-	@echo "Registering MCP servers with Claude Code..."
-	@node scripts/install-mcp.js
+	@chmod +x scripts/install-mcp.sh
+	@scripts/install-mcp.sh
 
 mcp-clean:
 	@for srv in $(MCP_SERVERS); do \
