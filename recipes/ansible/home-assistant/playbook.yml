@@ -1,0 +1,78 @@
+---
+# Post-install configuration for Home Assistant OS (HAOS).
+#
+# HAOS manages itself — this playbook only handles:
+#   1. Deploying the Traefik dynamic route so HA is reachable at https://home.<domain>
+#   2. Printing the trusted_proxies config you need to add to configuration.yaml
+#      (required so HA accepts requests forwarded by Traefik)
+#
+# Prerequisites:
+#   - HAOS VM created via Terraform and running at ha_ip:8123
+#   - Initial setup wizard completed in the browser (create your account)
+#   - Traefik LXC already deployed and running
+#
+# Variables (pass via --extra-vars or inventory):
+#   ha_ip       Home Assistant VM IP (default: 192.168.86.41)
+#   domain      Base domain (required, e.g. example.com)
+#   traefik_ip  Traefik LXC IP (default: 192.168.86.20)
+
+# --- Play 1: Deploy Traefik route ---
+- name: Deploy Traefik route for Home Assistant
+  hosts: traefik
+  vars:
+    domain: ""
+    ha_ip: "192.168.86.41"
+
+  pre_tasks:
+    - name: Require domain
+      ansible.builtin.fail:
+        msg: "domain is required. Pass via --extra-vars \"domain=example.com\""
+      when: domain == ""
+
+  tasks:
+    - name: Deploy Home Assistant Traefik route
+      ansible.builtin.template:
+        src: homeassistant.yml.j2
+        dest: /etc/traefik/dynamic/homeassistant.yml
+        mode: "0644"
+
+# --- Play 2: Print trusted_proxies instructions ---
+- name: Print Home Assistant trusted_proxies instructions
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    ha_ip: "192.168.86.41"
+    traefik_ip: "192.168.86.20"
+    domain: ""
+
+  tasks:
+    - name: Verify HA is reachable
+      ansible.builtin.uri:
+        url: "http://{{ ha_ip }}:8123"
+        status_code: 200
+        validate_certs: false
+      register: _ha_check
+      failed_when: false
+
+    - name: Print trusted_proxies instructions
+      ansible.builtin.debug:
+        msg:
+          - "Home Assistant Traefik route deployed."
+          - ""
+          - "REQUIRED MANUAL STEP — add this to /config/configuration.yaml in HA:"
+          - ""
+          - "  http:"
+          - "    use_x_forwarded_for: true"
+          - "    trusted_proxies:"
+          - "      - {{ traefik_ip }}"
+          - ""
+          - "How to edit configuration.yaml:"
+          - "  Option 1: Install 'Studio Code Server' addon in HA"
+          - "            Settings → Add-ons → Add-on Store → search Studio Code Server"
+          - "  Option 2: Install 'Terminal & SSH' addon, use the built-in terminal"
+          - "  Option 3: HA UI → Settings → System → Edit configuration.yaml"
+          - ""
+          - "After editing, restart HA: Settings → System → Restart Home Assistant"
+          - ""
+          - "Then verify: https://home.{{ domain }} should load without a 400 error"

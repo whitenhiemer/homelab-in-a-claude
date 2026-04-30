@@ -1,0 +1,216 @@
+---
+# Configure TrueNAS Scale via REST API after OS installation.
+# Creates a ZFS pool, datasets, and NFS shares. Runs entirely from localhost
+# via HTTP — no SSH to TrueNAS required.
+#
+# Prerequisites:
+#   - TrueNAS Scale installed and reachable at truenas_host
+#   - At least one data disk visible inside the VM (not the OS disk)
+#   - Admin password known
+#
+# Variables (pass via --extra-vars):
+#   truenas_host      TrueNAS IP/hostname (default: http://192.168.86.40)
+#   truenas_password  Admin password (required)
+#   data_disk         Disk name for the ZFS pool (default: sdb)
+#   pool_name         ZFS pool name (default: tank)
+#   nfs_network       CIDR allowed to mount NFS shares (default: 192.168.86.0/24)
+
+- name: Configure TrueNAS Scale
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    truenas_host: "http://192.168.86.40"
+    truenas_api: "{{ truenas_host }}/api/v2.0"
+    truenas_user: "admin"
+    truenas_password: ""
+    pool_name: "tank"
+    data_disk: "sdb"
+    nfs_network: "192.168.86.0/24"
+    _auth:
+      url_username: "{{ truenas_user }}"
+      url_password: "{{ truenas_password }}"
+      force_basic_auth: true
+      validate_certs: false
+
+  pre_tasks:
+    - name: Require truenas_password
+      ansible.builtin.fail:
+        msg: "truenas_password is required. Pass via --extra-vars."
+      when: truenas_password == ""
+
+  tasks:
+    - name: Wait for TrueNAS API
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/system/info"
+        method: GET
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        status_code: 200
+      register: _info
+      until: _info.status == 200
+      retries: 30
+      delay: 10
+
+    # --- ZFS Pool ---
+    - name: Check existing pools
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/pool"
+        method: GET
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: _pools
+
+    - name: Create ZFS pool
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/pool"
+        method: POST
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          name: "{{ pool_name }}"
+          topology:
+            data:
+              - type: STRIPE
+                disks: ["{{ data_disk }}"]
+          encryption: false
+        status_code: 200
+      register: _pool_create
+      when: _pools.json | selectattr('name', 'equalto', pool_name) | list | length == 0
+
+    - name: Wait for pool creation job
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/core/get_jobs?id={{ _pool_create.json.id }}"
+        method: GET
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: _pool_job
+      until: _pool_job.json[0].state in ['SUCCESS', 'FAILED']
+      retries: 30
+      delay: 10
+      when: _pool_create is changed
+
+    - name: Fail if pool creation failed
+      ansible.builtin.fail:
+        msg: "Pool creation failed: {{ _pool_job.json[0].error }}"
+      when: _pool_create is changed and _pool_job.json[0].state == 'FAILED'
+
+    # --- Datasets ---
+    - name: Get existing datasets
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/pool/dataset"
+        method: GET
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: _datasets
+
+    - name: Create datasets
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/pool/dataset"
+        method: POST
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          name: "{{ pool_name }}/{{ item.name }}"
+          comments: "{{ item.comment }}"
+          compression: LZ4
+        status_code: 200
+      loop:
+        - {name: "media",           comment: "Media library root"}
+        - {name: "media/movies",    comment: "Movies"}
+        - {name: "media/tv",        comment: "TV shows"}
+        - {name: "media/music",     comment: "Music"}
+        - {name: "media/downloads", comment: "Download staging"}
+        - {name: "backups",         comment: "Proxmox + Home Assistant backups"}
+        - {name: "isos",            comment: "Proxmox ISO images"}
+      when: >
+        _datasets.json |
+        selectattr('name', 'equalto', pool_name + '/' + item.name) |
+        list | length == 0
+
+    # --- NFS Service ---
+    - name: Enable NFS service autostart
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/service/id/nfs"
+        method: PUT
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          enable: true
+
+    - name: Start NFS service
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/service/start"
+        method: POST
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          service: nfs
+
+    # --- NFS Shares ---
+    - name: Get existing NFS shares
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/sharing/nfs"
+        method: GET
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: _shares
+
+    - name: Create NFS shares
+      ansible.builtin.uri:
+        url: "{{ truenas_api }}/sharing/nfs"
+        method: POST
+        url_username: "{{ truenas_user }}"
+        url_password: "{{ truenas_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          path: "/mnt/{{ pool_name }}/{{ item.dataset }}"
+          comment: "{{ item.comment }}"
+          networks: ["{{ nfs_network }}"]
+          hosts: []
+          ro: false
+          maproot_user: root
+          maproot_group: wheel
+        status_code: 200
+      loop:
+        - {dataset: "media",   comment: "Media — Plex, Jellyfin, ARR stack"}
+        - {dataset: "backups", comment: "VM and Home Assistant backups"}
+        - {dataset: "isos",    comment: "Proxmox ISO images"}
+      when: >
+        _shares.json |
+        selectattr('path', 'equalto', '/mnt/' + pool_name + '/' + item.dataset) |
+        list | length == 0

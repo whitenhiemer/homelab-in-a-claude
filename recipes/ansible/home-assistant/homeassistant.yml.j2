@@ -1,0 +1,15 @@
+http:
+  routers:
+    homeassistant:
+      rule: "Host(`home.{{ domain }}`)"
+      entryPoints:
+        - websecure
+      service: homeassistant
+      tls:
+        certResolver: cloudflare
+
+  services:
+    homeassistant:
+      loadBalancer:
+        servers:
+          - url: "http://{{ ha_ip }}:8123"

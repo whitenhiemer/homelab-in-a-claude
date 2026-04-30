@@ -27,6 +27,10 @@ Claude picks the right recipe for the job, fills in your specific IPs and hostna
 | [traefik](https://github.com/whitenhiemer/homelab-in-a-claude/tree/master/recipes/ansible/traefik) | Traefik v3 reverse proxy with Let's Encrypt DNS-01 via Cloudflare |
 | [monitoring](https://github.com/whitenhiemer/homelab-in-a-claude/tree/master/recipes/ansible/monitoring) | Prometheus + Grafana + Alertmanager + optional Proxmox PVE exporter |
 | [arr-stack](https://github.com/whitenhiemer/homelab-in-a-claude/tree/master/recipes/ansible/arr-stack) | Sonarr, Radarr, Prowlarr, Bazarr, Overseerr, SABnzbd behind gluetun VPN |
+| [wireguard](https://github.com/whitenhiemer/homelab-in-a-claude/tree/master/recipes/ansible/wireguard) | WireGuard VPN server with per-client keypair generation and QR codes |
+| [authelia](https://github.com/whitenhiemer/homelab-in-a-claude/tree/master/recipes/ansible/authelia) | Authentik SSO via Docker Compose (PostgreSQL + Redis + server + worker) |
+| [truenas](https://github.com/whitenhiemer/homelab-in-a-claude/tree/master/recipes/ansible/truenas) | TrueNAS Scale via REST API — ZFS pool, datasets, NFS shares |
+| [home-assistant](https://github.com/whitenhiemer/homelab-in-a-claude/tree/master/recipes/ansible/home-assistant) | Traefik route for Home Assistant OS + trusted_proxies instructions |
 
 ## Kubernetes
 

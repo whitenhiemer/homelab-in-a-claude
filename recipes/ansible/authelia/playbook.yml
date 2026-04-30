@@ -1,0 +1,130 @@
+---
+# Deploy Authentik identity provider via Docker Compose.
+# Stack: PostgreSQL 16 + Redis + Authentik server + worker.
+# Credentials are auto-generated on first run and stored in .env.
+#
+# After deploy, complete setup in the browser:
+#   https://auth.<your-domain>/if/flow/initial-setup/
+#
+# Variables (pass via --extra-vars or inventory):
+#   domain     Base domain for the Authentik URL (required, e.g. example.com)
+
+- name: Deploy Authentik SSO
+  hosts: authelia
+  vars:
+    auth_base_dir: /opt/authentik
+    domain: ""
+
+  pre_tasks:
+    - name: Require domain
+      ansible.builtin.fail:
+        msg: "domain is required. Pass via --extra-vars \"domain=example.com\""
+      when: domain == ""
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg, openssl]
+        state: present
+
+    - name: Create Docker keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker GPG key
+      ansible.builtin.shell:
+        cmd: curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Set Docker GPG key permissions
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        mode: "0644"
+
+    - name: Add Docker repository
+      ansible.builtin.copy:
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable
+        dest: /etc/apt/sources.list.d/docker.list
+        mode: "0644"
+
+    - name: Install Docker CE
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+        state: present
+        update_cache: true
+
+    - name: Create directory structure
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ auth_base_dir }}"
+        - "{{ auth_base_dir }}/postgres"
+        - "{{ auth_base_dir }}/redis"
+        - "{{ auth_base_dir }}/media"
+        - "{{ auth_base_dir }}/certs"
+        - "{{ auth_base_dir }}/templates"
+
+    - name: Check if .env exists
+      ansible.builtin.stat:
+        path: "{{ auth_base_dir }}/.env"
+      register: _env_file
+
+    - name: Generate PostgreSQL password
+      ansible.builtin.shell: openssl rand -hex 24
+      register: _pg_pass
+      changed_when: false
+      when: not _env_file.stat.exists
+
+    - name: Generate Authentik secret key
+      ansible.builtin.shell: openssl rand -hex 32
+      register: _secret_key
+      changed_when: false
+      when: not _env_file.stat.exists
+
+    - name: Write .env file
+      ansible.builtin.copy:
+        content: |
+          PG_PASS={{ _pg_pass.stdout }}
+          AUTHENTIK_SECRET_KEY={{ _secret_key.stdout }}
+          AUTHENTIK_ERROR_REPORTING__ENABLED=false
+        dest: "{{ auth_base_dir }}/.env"
+        mode: "0600"
+      when: not _env_file.stat.exists
+      no_log: true
+
+    - name: Deploy docker-compose.yml
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ auth_base_dir }}/docker-compose.yml"
+        mode: "0644"
+      notify: Restart Authentik
+
+    - name: Start Authentik
+      ansible.builtin.shell:
+        cmd: docker compose up -d
+        chdir: "{{ auth_base_dir }}"
+      changed_when: false
+
+    - name: Wait for Authentik health endpoint
+      ansible.builtin.uri:
+        url: "http://localhost:9000/-/health/live/"
+        status_code: 204
+      register: _health
+      until: _health.status == 204
+      retries: 18
+      delay: 10
+
+  handlers:
+    - name: Restart Authentik
+      ansible.builtin.shell:
+        cmd: docker compose up -d --force-recreate
+        chdir: "{{ auth_base_dir }}"

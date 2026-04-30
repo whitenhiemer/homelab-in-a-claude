@@ -1,0 +1,208 @@
+---
+# Install and configure WireGuard VPN on a Debian LXC.
+# Generates server + per-client keypairs, templates configs, and starts wg-quick@wg0.
+# Client .conf files are fetched to the local machine for import into WireGuard apps.
+#
+# Variables (pass via --extra-vars or inventory):
+#   wg_endpoint       Public hostname/IP for the VPN endpoint (required)
+#   wg_port           UDP port (default: 51820)
+#   wg_subnet         VPN tunnel subnet (default: 10.10.0.0/24)
+#   wg_server_ip      Server's VPN address (default: 10.10.0.1)
+#   wg_dns            DNS server pushed to clients (default: 8.8.8.8)
+#   wg_allowed_ips    Routes pushed to clients (default: LAN + VPN subnet)
+#   wg_client_list    List of {name, ip} dicts for each client peer
+
+- name: Deploy WireGuard VPN
+  hosts: wireguard
+  vars:
+    wg_port: 51820
+    wg_subnet: "10.10.0.0/24"
+    wg_server_ip: "10.10.0.1"
+    wg_dns: "8.8.8.8"
+    wg_endpoint: ""
+    wg_allowed_ips: "192.168.86.0/24, 10.10.0.0/24"
+    wg_config_dir: /etc/wireguard
+    wg_client_dir: /etc/wireguard/clients
+    wg_client_list:
+      - name: laptop
+        ip: "10.10.0.2"
+      - name: phone
+        ip: "10.10.0.3"
+
+  pre_tasks:
+    - name: Require wg_endpoint
+      ansible.builtin.fail:
+        msg: "wg_endpoint is required. Pass via --extra-vars \"wg_endpoint=vpn.example.com\""
+      when: wg_endpoint == ""
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install WireGuard
+      ansible.builtin.apt:
+        name: [wireguard, wireguard-tools, iptables, qrencode]
+        state: present
+
+    - name: Enable IP forwarding (persistent)
+      ansible.builtin.copy:
+        content: "net.ipv4.ip_forward = 1\n"
+        dest: /etc/sysctl.d/99-wireguard.conf
+        mode: "0644"
+      notify: Apply sysctl
+
+    - name: Enable IP forwarding (immediate)
+      ansible.builtin.command: sysctl -w net.ipv4.ip_forward=1
+      changed_when: false
+
+    - name: Create WireGuard directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop:
+        - "{{ wg_config_dir }}"
+        - "{{ wg_client_dir }}"
+
+    # --- Server keypair ---
+    - name: Generate server private key
+      ansible.builtin.shell:
+        cmd: wg genkey > {{ wg_config_dir }}/server_private.key && chmod 600 {{ wg_config_dir }}/server_private.key
+        creates: "{{ wg_config_dir }}/server_private.key"
+      no_log: true
+
+    - name: Read server private key
+      ansible.builtin.slurp:
+        src: "{{ wg_config_dir }}/server_private.key"
+      register: _server_privkey
+      no_log: true
+
+    - name: Derive server public key
+      ansible.builtin.shell: "echo '{{ _server_privkey.content | b64decode | trim }}' | wg pubkey"
+      register: _server_pubkey
+      changed_when: false
+      no_log: true
+
+    - name: Set server key facts
+      ansible.builtin.set_fact:
+        wg_server_private_key: "{{ _server_privkey.content | b64decode | trim }}"
+        wg_server_public_key: "{{ _server_pubkey.stdout | trim }}"
+      no_log: true
+
+    # --- Client keypairs ---
+    - name: Generate client private keys
+      ansible.builtin.shell:
+        cmd: "wg genkey > {{ wg_config_dir }}/{{ item.name }}_private.key && chmod 600 {{ wg_config_dir }}/{{ item.name }}_private.key"
+        creates: "{{ wg_config_dir }}/{{ item.name }}_private.key"
+      loop: "{{ wg_client_list }}"
+      no_log: true
+
+    - name: Generate client preshared keys
+      ansible.builtin.shell:
+        cmd: "wg genpsk > {{ wg_config_dir }}/{{ item.name }}_psk.key && chmod 600 {{ wg_config_dir }}/{{ item.name }}_psk.key"
+        creates: "{{ wg_config_dir }}/{{ item.name }}_psk.key"
+      loop: "{{ wg_client_list }}"
+      no_log: true
+
+    - name: Read client keys
+      ansible.builtin.slurp:
+        src: "{{ wg_config_dir }}/{{ item.name }}_{{ suffix }}.key"
+      loop: "{{ wg_client_list }}"
+      loop_control:
+        loop_var: item
+      vars:
+        suffix: "{{ key_type }}"
+      register: _client_keys
+      no_log: true
+      with_nested:
+        - "{{ wg_client_list }}"
+        - [private, psk]
+      when: false  # Use explicit tasks below instead
+
+    - name: Read all client private keys
+      ansible.builtin.slurp:
+        src: "{{ wg_config_dir }}/{{ item.name }}_private.key"
+      loop: "{{ wg_client_list }}"
+      register: _client_privkeys
+      no_log: true
+
+    - name: Read all client preshared keys
+      ansible.builtin.slurp:
+        src: "{{ wg_config_dir }}/{{ item.name }}_psk.key"
+      loop: "{{ wg_client_list }}"
+      register: _client_psks
+      no_log: true
+
+    - name: Derive client public keys
+      ansible.builtin.shell: "echo '{{ item.content | b64decode | trim }}' | wg pubkey"
+      loop: "{{ _client_privkeys.results }}"
+      register: _client_pubkeys
+      changed_when: false
+      no_log: true
+
+    - name: Build client facts
+      ansible.builtin.set_fact:
+        wg_clients: >-
+          {{ wg_clients | default([]) + [{
+            'name': wg_client_list[idx].name,
+            'ip': wg_client_list[idx].ip,
+            'private_key': _client_privkeys.results[idx].content | b64decode | trim,
+            'public_key': _client_pubkeys.results[idx].stdout | trim,
+            'preshared_key': _client_psks.results[idx].content | b64decode | trim
+          }] }}
+      loop: "{{ wg_client_list }}"
+      loop_control:
+        index_var: idx
+      no_log: true
+
+    # --- Server config ---
+    - name: Deploy wg0.conf
+      ansible.builtin.template:
+        src: wg0.conf.j2
+        dest: "{{ wg_config_dir }}/wg0.conf"
+        mode: "0600"
+      notify: Restart WireGuard
+
+    # --- Client configs ---
+    - name: Deploy client configs
+      ansible.builtin.template:
+        src: client.conf.j2
+        dest: "{{ wg_client_dir }}/{{ item.name }}.conf"
+        mode: "0600"
+      loop: "{{ wg_clients }}"
+      no_log: true
+
+    - name: Generate QR codes
+      ansible.builtin.shell: "qrencode -t ansiutf8 < {{ wg_client_dir }}/{{ item.name }}.conf > {{ wg_client_dir }}/{{ item.name }}.qr"
+      loop: "{{ wg_client_list }}"
+      changed_when: true
+
+    - name: Enable and start WireGuard
+      ansible.builtin.systemd:
+        name: wg-quick@wg0
+        enabled: true
+        state: started
+
+    - name: Verify wg0 is up
+      ansible.builtin.command: wg show
+      register: _wg_show
+      changed_when: false
+      failed_when: "'wg0' not in _wg_show.stdout"
+
+    - name: Fetch client configs locally
+      ansible.builtin.fetch:
+        src: "{{ wg_client_dir }}/{{ item.name }}.conf"
+        dest: "clients/{{ item.name }}.conf"
+        flat: true
+      loop: "{{ wg_client_list }}"
+
+  handlers:
+    - name: Apply sysctl
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/99-wireguard.conf
+      changed_when: true
+
+    - name: Restart WireGuard
+      ansible.builtin.systemd:
+        name: wg-quick@wg0
+        state: restarted
