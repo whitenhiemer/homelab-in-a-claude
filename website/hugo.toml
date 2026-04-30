@@ -15,6 +15,7 @@ pygmentsCodeFences = true
     endLevel = 9
 
 [params]
+  geekdocLogo = "logo.png"
   geekdocRepo = "https://github.com/whitenhiemer/homelab-in-a-claude"
   geekdocEditPath = "edit/master/website/content"
   geekdocSearch = true
