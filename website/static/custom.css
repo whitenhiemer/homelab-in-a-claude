@@ -1,5 +1,14 @@
 .gdoc-brand__img {
   width: 7rem;
   height: 7rem;
+  min-width: 7rem;
+  min-height: 7rem;
   border-radius: 50%;
+  object-fit: contain;
+}
+
+.gdoc-header .container {
+  align-items: center;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
