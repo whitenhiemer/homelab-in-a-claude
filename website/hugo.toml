@@ -23,3 +23,4 @@ pygmentsCodeFences = true
   geekdocCollapseSection = true
   description = "An AI-guided homelab builder powered by Claude"
 
+
