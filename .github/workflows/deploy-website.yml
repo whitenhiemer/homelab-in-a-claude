@@ -8,7 +8,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab]
 
     steps:
       - uses: actions/checkout@v4
@@ -16,26 +16,18 @@ jobs:
       - name: Install Hugo
         run: |
           HUGO_VERSION=0.161.1
-          curl -sSL "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin hugo
+          if ! hugo version 2>/dev/null | grep -q "${HUGO_VERSION}"; then
+            curl -sSL "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" \
+              | sudo tar -xz -C /usr/local/bin hugo
+          fi
 
       - name: Build site
         run: cd website && hugo --minify
 
-      - name: Install SSH key
+      - name: Copy to serve directory
         run: |
-          install -m 600 -D /dev/null ~/.ssh/id_deploy
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
-          echo "${{ secrets.DEPLOY_HOST_KEY }}" > ~/.ssh/known_hosts
-
-      - name: Rsync to monitoring LXC
-        run: |
-          rsync -az --delete \
-            -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes" \
-            website/public/ \
-            root@192.168.86.25:/opt/monitoring/homelab-site/build/html/
+          rsync -a --delete website/public/ /opt/monitoring/homelab-site/build/html/
 
       - name: Rebuild container
         run: |
-          ssh -i ~/.ssh/id_deploy root@192.168.86.25 \
-            "docker compose -f /opt/monitoring/docker-compose.yml up -d --build homelab-site"
+          docker compose -f /opt/monitoring/docker-compose.yml up -d --build homelab-site
