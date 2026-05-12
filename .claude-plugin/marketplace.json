@@ -16,9 +16,9 @@
       "source": {
         "source": "git-subdir",
         "url": "https://github.com/whitenhiemer/homelab-in-a-claude.git",
-        "path": ".",
+        "path": "plugin",
         "ref": "master",
-        "sha": "bfc782b9fdf4740f9ea36a9a21b8160d1009492a"
+        "sha": "ff3546c1c1ab7e24ce4de2690f68a0b3560e86ae"
       }
     }
   ]
