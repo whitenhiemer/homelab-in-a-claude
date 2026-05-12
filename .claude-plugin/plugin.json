@@ -1,0 +1,9 @@
+{
+  "name": "homelab-in-a-claude",
+  "description": "Tools and skills for building and administering a Proxmox homelab",
+  "version": "1.0.0",
+  "author": {
+    "name": "Brandon Woodward",
+    "email": "bwoodwar@gmail.com"
+  }
+}
