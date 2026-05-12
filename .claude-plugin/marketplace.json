@@ -1,0 +1,25 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "homelab-plugins",
+  "description": "Claude Code plugins for Brandon's homelab",
+  "owner": {
+    "name": "Brandon Woodward",
+    "email": "bwoodwar@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "homelab-in-a-claude",
+      "description": "Skills for administering and building a Proxmox homelab at woodhead.tech",
+      "author": {
+        "name": "Brandon Woodward"
+      },
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/whitenhiemer/homelab-in-a-claude.git",
+        "path": ".",
+        "ref": "master",
+        "sha": "bfc782b9fdf4740f9ea36a9a21b8160d1009492a"
+      }
+    }
+  ]
+}
