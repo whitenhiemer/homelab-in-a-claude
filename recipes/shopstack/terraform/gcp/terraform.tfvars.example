@@ -1,0 +1,10 @@
+gcp_project   = "my-gcp-project-id"
+gcp_region    = "us-central1"
+gcp_zone      = "us-central1-a"
+client_name   = "vetclinic-oak"       # short slug, used for resource names
+machine_type  = "e2-standard-2"
+disk_size_gb  = 40
+ssh_public_key = "ssh-ed25519 AAAA... admin@shopstack"
+
+# Restrict SSH to your IP only — find yours at ifconfig.me
+admin_cidr_blocks = ["YOUR.IP.HERE/32"]

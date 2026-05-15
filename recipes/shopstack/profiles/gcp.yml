@@ -1,0 +1,22 @@
+---
+# ShopStack profile: Google Cloud Compute Engine
+#
+# Recommended instance: e2-standard-2 (2 vCPU, 8GB RAM) — ~$50/mo
+# OS: Debian 12 (debian-cloud/debian-12)
+# Storage: 40GB balanced persistent disk
+#
+# Terraform provisions the instance — see terraform/gcp/ for the module.
+# After `terraform apply`, update inventory.ini with the static IP output.
+#
+# DNS: Static external IP — set Cloudflare A record once, no DDNS needed.
+# All ports handled via GCP Firewall Rules (defined in Terraform).
+
+shopstack_platform: gcp
+
+# e2-standard-2 sizing
+traefik_memory_limit: "256m"
+nextcloud_php_memory: "1G"
+postgres_shared_buffers: "1GB"
+postgres_max_connections: 100
+
+ddns_enabled: false   # Static external IP

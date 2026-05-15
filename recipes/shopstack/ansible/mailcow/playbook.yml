@@ -1,0 +1,122 @@
+---
+# Deploy Mailcow email server for ShopStack.
+# Mailcow runs via Docker Compose and manages its own TLS via Let's Encrypt.
+# Traefik proxies HTTPS (443) to Mailcow's nginx-mailcow; Mailcow handles SMTP/IMAP ports directly.
+#
+# Variables:
+#   mailcow_domain        Mail domain, e.g. "yourclinic.com" (required)
+#   mailcow_hostname      Hostname for the mail server, e.g. "mail.yourclinic.com" (required)
+#   mailcow_tz            Timezone (default: America/Chicago)
+#   mailcow_branch        Mailcow release branch (default: master)
+#   mailcow_install_dir   Install path (default: /opt/mailcow)
+
+- name: Deploy Mailcow email server
+  hosts: shopstack
+  vars:
+    mailcow_domain: ""
+    mailcow_hostname: ""
+    mailcow_tz: "America/Chicago"
+    mailcow_branch: "master"
+    mailcow_install_dir: /opt/mailcow
+
+  tasks:
+    - name: Assert required variables
+      ansible.builtin.assert:
+        that:
+          - mailcow_domain != ""
+          - mailcow_hostname != ""
+        fail_msg: "mailcow_domain and mailcow_hostname are required"
+
+    - name: Install Docker prerequisites
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg, git]
+        state: present
+        update_cache: true
+
+    - name: Add Docker GPG key
+      ansible.builtin.shell:
+        cmd: curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Set Docker GPG key permissions
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        mode: "0644"
+
+    - name: Add Docker repository
+      ansible.builtin.copy:
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable
+        dest: /etc/apt/sources.list.d/docker.list
+        mode: "0644"
+
+    - name: Install Docker CE
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+        state: present
+        update_cache: true
+
+    - name: Clone Mailcow dockerized
+      ansible.builtin.git:
+        repo: https://github.com/mailcow/mailcow-dockerized.git
+        dest: "{{ mailcow_install_dir }}"
+        version: "{{ mailcow_branch }}"
+        force: false
+
+    - name: Generate Mailcow config
+      ansible.builtin.shell:
+        cmd: |
+          cd {{ mailcow_install_dir }}
+          MAILCOW_HOSTNAME={{ mailcow_hostname }} \
+          MAILCOW_TZ={{ mailcow_tz }} \
+          ./generate_config.sh
+        creates: "{{ mailcow_install_dir }}/mailcow.conf"
+
+    - name: Configure Mailcow to work behind Traefik
+      ansible.builtin.lineinfile:
+        path: "{{ mailcow_install_dir }}/mailcow.conf"
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: "HTTP_PORT", value: "8080" }
+        - { key: "HTTP_BIND", value: "127.0.0.1" }
+        - { key: "HTTPS_PORT", value: "8443" }
+        - { key: "HTTPS_BIND", value: "127.0.0.1" }
+        - { key: "SKIP_LETS_ENCRYPT", value: "y" }
+      notify: Restart Mailcow
+
+    - name: Create Traefik dynamic config for Mailcow
+      ansible.builtin.copy:
+        content: |
+          http:
+            routers:
+              mailcow:
+                rule: "Host(`{{ mailcow_hostname }}`)"
+                entryPoints: [websecure]
+                service: mailcow
+                tls:
+                  certResolver: cloudflare
+            services:
+              mailcow:
+                loadBalancer:
+                  servers:
+                    - url: "http://127.0.0.1:8080"
+        dest: /etc/traefik/dynamic/mailcow.yml
+        mode: "0644"
+      notify: Reload Traefik
+
+    - name: Start Mailcow
+      ansible.builtin.shell:
+        cmd: docker compose up -d
+        chdir: "{{ mailcow_install_dir }}"
+
+  handlers:
+    - name: Restart Mailcow
+      ansible.builtin.shell:
+        cmd: docker compose down && docker compose up -d
+        chdir: "{{ mailcow_install_dir }}"
+
+    - name: Reload Traefik
+      ansible.builtin.systemd:
+        name: traefik
+        state: reloaded

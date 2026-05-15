@@ -1,0 +1,22 @@
+---
+# ShopStack profile: AWS EC2
+#
+# Recommended instance: t3.large (2 vCPU, 8GB RAM) — $60/mo on-demand, ~$40/mo reserved
+# OS: Debian 12 (search AMI: debian-12-amd64-*)
+# Storage: 40GB gp3 root volume
+#
+# Terraform provisions the instance — see terraform/aws/ for the module.
+# After `terraform apply`, update inventory.ini with the Elastic IP output.
+#
+# DNS: Elastic IP is static — set Cloudflare A record once, no DDNS needed.
+# All ports handled via AWS Security Group (defined in Terraform).
+
+shopstack_platform: aws
+
+# t3.large sizing
+traefik_memory_limit: "256m"
+nextcloud_php_memory: "1G"
+postgres_shared_buffers: "1GB"
+postgres_max_connections: 100
+
+ddns_enabled: false   # Elastic IP is static

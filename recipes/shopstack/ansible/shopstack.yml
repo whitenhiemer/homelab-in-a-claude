@@ -1,0 +1,58 @@
+---
+# ShopStack master playbook — deploys the full small-business infrastructure stack.
+#
+# Deployment order:
+#   1. postgres     — shared database backend (Nextcloud depends on this)
+#   2. traefik      — reverse proxy + TLS (all web services depend on this)
+#   3. wireguard    — remote management tunnel (deploy before anything external)
+#   4. mailcow      — email server
+#   5. nextcloud    — file storage
+#   6. uptime-kuma  — internal uptime monitoring
+#
+# Usage:
+#   ansible-playbook shopstack.yml -i inventory.ini \
+#     --extra-vars "@profiles/on-prem.yml" \
+#     --extra-vars "postgres_password=... nextcloud_db_pass=... nextcloud_admin_pass=..."
+#
+# Profile vars files:
+#   profiles/on-prem.yml  — Beelink mini PC (bare metal, on-site)
+#   profiles/aws.yml      — AWS EC2 instance
+#   profiles/gcp.yml      — GCP Compute Engine instance
+#
+# Required vars (must be passed or set in vault):
+#   domain              Base domain, e.g. yourclinic.com
+#   cf_api_token        Cloudflare API token for DNS-01 TLS
+#   acme_email          Email for Let's Encrypt registration
+#   postgres_password   PostgreSQL superuser password
+#   nextcloud_db_pass   Nextcloud database password
+#   nextcloud_admin_pass  Nextcloud admin password
+#   mailcow_domain      Mail domain (usually same as domain)
+#   mailcow_hostname    Hostname for mail server, e.g. mail.yourclinic.com
+
+- name: 1. Deploy PostgreSQL
+  ansible.builtin.import_playbook: postgres/playbook.yml
+  vars:
+    nextcloud_db_name: "{{ nextcloud_db_name | default('nextcloud') }}"
+    nextcloud_db_user: "{{ nextcloud_db_user | default('nextcloud') }}"
+
+- name: 2. Deploy Traefik
+  ansible.builtin.import_playbook: "{{ playbook_dir }}/../../../../recipes/ansible/traefik/playbook.yml"
+
+- name: 3. Deploy WireGuard
+  ansible.builtin.import_playbook: "{{ playbook_dir }}/../../../../recipes/ansible/wireguard/playbook.yml"
+  vars:
+    wg_endpoint: "wg.{{ domain }}"
+    wg_allowed_ips: "10.10.0.0/24"
+
+- name: 4. Deploy Mailcow
+  ansible.builtin.import_playbook: mailcow/playbook.yml
+  vars:
+    mailcow_hostname: "mail.{{ domain }}"
+
+- name: 5. Deploy Nextcloud
+  ansible.builtin.import_playbook: nextcloud/playbook.yml
+  vars:
+    nextcloud_domain: "files.{{ domain }}"
+
+- name: 6. Deploy Uptime Kuma
+  ansible.builtin.import_playbook: uptime-kuma/playbook.yml

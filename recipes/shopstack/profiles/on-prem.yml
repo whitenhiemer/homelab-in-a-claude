@@ -1,0 +1,27 @@
+---
+# ShopStack profile: on-premises Beelink mini PC
+#
+# Hardware: Beelink EQ12 (or similar mini PC)
+#   - 16GB RAM, 500GB NVMe
+#   - Debian 12 installed, SSH enabled, static LAN IP assigned via router DHCP reservation
+#
+# Before running:
+#   1. Flash Debian 12 to a USB, install on the Beelink
+#   2. Assign a static IP via router DHCP reservation
+#   3. Enable SSH: `systemctl enable --now sshd`
+#   4. Add your SSH public key to root's authorized_keys
+#   5. Point domain DNS (Cloudflare) to your public IP via DDNS
+#   6. Port-forward 80, 443, 25, 465, 587, 993, 995 on router → Beelink IP
+#   7. Port-forward 51820/udp → Beelink IP (WireGuard remote management)
+
+shopstack_platform: on-prem
+
+# Resource sizing for Beelink EQ12 (16GB RAM, 4-core N100)
+traefik_memory_limit: "256m"
+nextcloud_php_memory: "512M"
+postgres_shared_buffers: "512MB"
+postgres_max_connections: 50
+
+# Cloudflare DDNS — keeps your public IP in sync even on residential ISP
+ddns_enabled: true
+ddns_update_interval: 300   # seconds

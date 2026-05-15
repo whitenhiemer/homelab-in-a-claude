@@ -1,0 +1,98 @@
+---
+# Deploy Nextcloud file storage for ShopStack.
+# Uses the system PostgreSQL instance deployed by the postgres recipe.
+# Routes HTTPS through Traefik via Docker labels.
+#
+# Variables:
+#   nextcloud_version       Nextcloud image tag (default: 28)
+#   nextcloud_domain        Subdomain, e.g. "files.yourclinic.com" (required)
+#   nextcloud_admin_user    Admin username (default: admin)
+#   nextcloud_admin_pass    Admin password (required)
+#   nextcloud_db_name       Must match postgres recipe (default: nextcloud)
+#   nextcloud_db_user       Must match postgres recipe (default: nextcloud)
+#   nextcloud_db_pass       Must match postgres recipe (required)
+#   nextcloud_data_dir      Data volume path (default: /opt/nextcloud/data)
+
+- name: Deploy Nextcloud
+  hosts: shopstack
+  vars:
+    nextcloud_version: "28"
+    nextcloud_domain: ""
+    nextcloud_admin_user: admin
+    nextcloud_admin_pass: ""
+    nextcloud_db_name: nextcloud
+    nextcloud_db_user: nextcloud
+    nextcloud_db_pass: ""
+    nextcloud_data_dir: /opt/nextcloud/data
+    nextcloud_install_dir: /opt/nextcloud
+
+  tasks:
+    - name: Assert required variables
+      ansible.builtin.assert:
+        that:
+          - nextcloud_domain != ""
+          - nextcloud_admin_pass != ""
+          - nextcloud_db_pass != ""
+        fail_msg: "nextcloud_domain, nextcloud_admin_pass, and nextcloud_db_pass are required"
+
+    - name: Install Docker prerequisites
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg]
+        state: present
+        update_cache: true
+
+    - name: Add Docker GPG key
+      ansible.builtin.shell:
+        cmd: curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Set Docker GPG key permissions
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        mode: "0644"
+
+    - name: Add Docker repository
+      ansible.builtin.copy:
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable
+        dest: /etc/apt/sources.list.d/docker.list
+        mode: "0644"
+
+    - name: Install Docker CE
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+        state: present
+        update_cache: true
+
+    - name: Create Nextcloud directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ nextcloud_install_dir }}"
+        - "{{ nextcloud_data_dir }}"
+
+    - name: Create proxy Docker network (idempotent)
+      community.docker.docker_network:
+        name: proxy
+        state: present
+
+    - name: Deploy docker-compose.yml
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ nextcloud_install_dir }}/docker-compose.yml"
+        mode: "0644"
+      notify: Restart Nextcloud
+
+    - name: Start Nextcloud
+      community.docker.docker_compose_v2:
+        project_src: "{{ nextcloud_install_dir }}"
+        state: present
+
+  handlers:
+    - name: Restart Nextcloud
+      community.docker.docker_compose_v2:
+        project_src: "{{ nextcloud_install_dir }}"
+        state: present
+        recreate: always

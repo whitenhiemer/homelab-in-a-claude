@@ -1,0 +1,93 @@
+---
+# Deploy PostgreSQL as the shared database backend for ShopStack.
+# Runs as a system service (not Docker) for reliability as a base dependency.
+#
+# Variables:
+#   postgres_version      PostgreSQL major version (default: 16)
+#   postgres_password     postgres superuser password (required)
+#   nextcloud_db_name     Database name for Nextcloud (default: nextcloud)
+#   nextcloud_db_user     Database user for Nextcloud (default: nextcloud)
+#   nextcloud_db_pass     Database password for Nextcloud (required)
+#   extra_databases       List of {name, user, password} for additional databases
+
+- name: Deploy PostgreSQL
+  hosts: shopstack
+  vars:
+    postgres_version: 16
+    postgres_password: ""
+    nextcloud_db_name: nextcloud
+    nextcloud_db_user: nextcloud
+    nextcloud_db_pass: ""
+    extra_databases: []
+
+  tasks:
+    - name: Install PostgreSQL
+      ansible.builtin.apt:
+        name:
+          - "postgresql-{{ postgres_version }}"
+          - python3-psycopg2
+        state: present
+        update_cache: true
+
+    - name: Ensure PostgreSQL is started and enabled
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+        enabled: true
+
+    - name: Set postgres superuser password
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_user:
+        name: postgres
+        password: "{{ postgres_password }}"
+      when: postgres_password != ""
+
+    - name: Create Nextcloud database user
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_user:
+        name: "{{ nextcloud_db_user }}"
+        password: "{{ nextcloud_db_pass }}"
+        state: present
+
+    - name: Create Nextcloud database
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_db:
+        name: "{{ nextcloud_db_name }}"
+        owner: "{{ nextcloud_db_user }}"
+        state: present
+
+    - name: Create extra databases
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_db:
+        name: "{{ item.name }}"
+        owner: "{{ item.user }}"
+        state: present
+      loop: "{{ extra_databases }}"
+      when: extra_databases | length > 0
+
+    - name: Create extra database users
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_user:
+        name: "{{ item.user }}"
+        password: "{{ item.password }}"
+        state: present
+      loop: "{{ extra_databases }}"
+      when: extra_databases | length > 0
+
+    - name: Configure PostgreSQL to listen on localhost only
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ postgres_version }}/main/postgresql.conf"
+        regexp: "^#?listen_addresses"
+        line: "listen_addresses = 'localhost'"
+      notify: Restart PostgreSQL
+
+  handlers:
+    - name: Restart PostgreSQL
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted
