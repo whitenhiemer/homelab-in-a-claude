@@ -64,6 +64,7 @@ SSH key default: `~/.ssh/id_ansible`. Exceptions noted in last column.
 | piboard            | 192.168.86.131  | bwoodwar | Pi 3B; Go dashboard + Waveshare display; SSH key: id_ed25519 |
 | klipper-ender5pro  | 192.168.86.136  | bwoodwar | Pi 3B; MainsailOS; Klipper for Ender 5 Pro      |
 | klipper-ender3     | 192.168.86.138  | bwoodwar | Pi 3B; MainsailOS; Klipper for Ender 3          |
+| legion (cachy)     | 192.168.86.173 (eth0) / 192.168.86.152 (wlan0) | bwoodwar | CachyOS laptop; WireGuard client (wg0, 10.10.0.4); NM dispatcher at /etc/NetworkManager/dispatcher.d/99-wireguard-home auto-downs wg0 on home network, ups it when away |
 
 ---
 
